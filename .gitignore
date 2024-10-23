@@ -5,6 +5,7 @@
 *.dll
 *.so
 *.dylib
+*.wasm
 /vendor
 
 # Test binary, built with `go test -c`
@@ -20,7 +21,9 @@
 .vscode
 
 # Binary, built with `make build`
-/conduit-connector-connectorname
+/conduit-processor-processorname.wasm
 
 ### OS ###
 .DS_Store
+
+

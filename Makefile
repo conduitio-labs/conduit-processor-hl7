@@ -2,19 +2,11 @@ VERSION=$(shell git describe --tags --dirty --always)
 
 .PHONY: build
 build:
-	go build -ldflags "-X 'github.com/conduitio/conduit-processor-processorname.version=${VERSION}'" -o conduit-processor-processorname cmd/processor/main.go
+	GOARCH=wasm GOOS=wasip1 go build -o conduit-processor-processorname.wasm cmd/processor/main.go
 
 .PHONY: test
 test:
 	go test $(GOTEST_FLAGS) -race ./...
-
-.PHONY: test-integration
-test-integration:
-	# run required docker containers, execute integration tests, stop containers after tests
-	docker compose -f test/docker-compose.yml up -d
-	go test $(GOTEST_FLAGS) -v -race ./...; ret=$$?; \
-		docker compose -f test/docker-compose.yml down; \
-		exit $$ret
 
 .PHONY: generate
 generate:

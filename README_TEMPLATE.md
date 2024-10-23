@@ -8,9 +8,7 @@ Run `make build` to build the processor.
 
 ## Testing
 
-Run `make test` to run all the unit tests. Run `make test-integration` to run the integration tests.
-
-The Docker compose file at `test/docker-compose.yml` can be used to run the required resource locally.
+Run `make test` to run all the unit tests.
 
 ## Functionality
 
