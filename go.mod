@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-processor-sdk v0.4.0
-	github.com/golangci/golangci-lint v1.63.3
+	github.com/golangci/golangci-lint v1.63.4
 	mvdan.cc/gofumpt v0.7.0
 )
 
