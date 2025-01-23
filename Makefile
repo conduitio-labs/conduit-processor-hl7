@@ -2,7 +2,7 @@ VERSION=$(shell git describe --tags --dirty --always)
 
 .PHONY: build
 build:
-	GOARCH=wasm GOOS=wasip1 go build -o conduit-processor-processorname.wasm cmd/processor/main.go
+	GOARCH=wasm GOOS=wasip1 go build -o conduit-processor-hl7.wasm cmd/processor/main.go
 
 .PHONY: test
 test:

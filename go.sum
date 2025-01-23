@@ -128,6 +128,8 @@ github.com/conduitio/conduit-commons v0.5.0 h1:28UIuOIo+6WvBZ4EU54KfPhSf44I1/Y65
 github.com/conduitio/conduit-commons v0.5.0/go.mod h1:xyT6XpGvj79gdtsn3qaD2KxadhsAYS+mmBOdln08Wio=
 github.com/conduitio/conduit-processor-sdk v0.4.0 h1:wF1Fj31aneNixNbW5rJ0/5Q3vwWeFkagB/Au1zaXwiI=
 github.com/conduitio/conduit-processor-sdk v0.4.0/go.mod h1:Jj9ZBTee7nO0XeociDxe9gSvLFN1GbPWP1Aj04DPeZQ=
+github.com/conduitio/conduit-processor-template v0.0.0-20250106064751-a41d1d89cd5c h1:CbnjIqrY82QiZNMsjD0V6r7v2HMF2TWQ0UX1KNs13Nc=
+github.com/conduitio/conduit-processor-template v0.0.0-20250106064751-a41d1d89cd5c/go.mod h1:0T2SQbqXtKqLS9X/X9TzEudJtmwUtsq+DNB1lwJ/m38=
 github.com/containerd/cgroups/v3 v3.0.3 h1:S5ByHZ/h9PMe5IOQoN7E+nMc2UcLEM/V48DGDJ9kip0=
 github.com/containerd/cgroups/v3 v3.0.3/go.mod h1:8HBe7V3aWGLFPd/k03swSIsGjZhHI2WzJmticMgVuz0=
 github.com/containerd/containerd v1.7.23 h1:H2CClyUkmpKAGlhQp95g2WXHfLYc7whAuvZGBNYOOwQ=

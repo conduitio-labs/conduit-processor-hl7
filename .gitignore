@@ -21,7 +21,7 @@
 .vscode
 
 # Binary, built with `make build`
-/conduit-processor-processorname.wasm
+/conduit-processor-hl7.wasm
 
 ### OS ###
 .DS_Store

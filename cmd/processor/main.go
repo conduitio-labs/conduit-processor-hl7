@@ -3,10 +3,15 @@
 package main
 
 import (
+	"fmt"
+
 	sdk "github.com/conduitio/conduit-processor-sdk"
-	processorname "github.com/conduitio/conduit-processor-template"
+	hl7 "github.com/conduitio/conduit-processor-template"
 )
 
 func main() {
-	sdk.Run(processorname.NewProcessor())
+	fmt.Printf("Starting HL7 processor\n")
+	processor := hl7.NewProcessor()
+	fmt.Printf("Created processor instance, running...\n")
+	sdk.Run(processor)
 }
