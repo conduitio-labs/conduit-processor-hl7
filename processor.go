@@ -163,7 +163,10 @@ func (p *Processor) Process(ctx context.Context, records []opencdc.Record) []sdk
 		}
 
 		hl7Message := convertFHIRToHL7(patient)
-		record.Payload.After = opencdc.RawData([]byte(hl7Message))
+		record.Payload.After = opencdc.StructuredData{
+			"hl7": hl7Message,
+		}
+		// record.Payload.After = opencdc.RawData([]byte(hl7Message))
 		logger.Debug().
 			Int("index", i).
 			Str("hl7_message", hl7Message).
