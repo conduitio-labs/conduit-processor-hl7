@@ -8,28 +8,18 @@ import (
 )
 
 const (
-	ProcessorConfigField     = "field"
-	ProcessorConfigThreshold = "threshold"
+	ProcessorConfigInputType = "inputType"
 )
 
 func (ProcessorConfig) Parameters() map[string]config.Parameter {
 	return map[string]config.Parameter{
-		ProcessorConfigField: {
+		ProcessorConfigInputType: {
 			Default:     "",
-			Description: "Field is the target field that will be set.",
+			Description: "",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationExclusion{List: []string{".Position"}},
-			},
-		},
-		ProcessorConfigThreshold: {
-			Default:     "",
-			Description: "Threshold is the threshold for filtering the record.",
-			Type:        config.ParameterTypeInt,
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-				config.ValidationGreaterThan{V: 0},
+				config.ValidationInclusion{List: []string{"fhir", "hl7"}},
 			},
 		},
 	}

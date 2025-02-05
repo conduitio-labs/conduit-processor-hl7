@@ -1,6 +1,6 @@
 # Conduit Processor for HL7
 
-[Conduit](https://conduit.io) processor for converting FHIR Patient resources to HL7 v2.x messages.
+[Conduit](https://conduit.io) processor for converting between FHIR Patient resources and HL7 v2.x messages.
 
 ## How to build?
 
@@ -12,43 +12,68 @@ Run `make test` to run all the unit tests.
 
 ## Functionality
 
-This processor converts FHIR Patient resources into HL7 v2.x messages. It specifically:
+This processor converts between FHIR Patient resources and HL7 v2.x messages. It can:
 
-- Takes FHIR Patient JSON as input
-- Converts it to an HL7 v2.x ADT^A01 message
-- Includes MSH (Message Header) and PID (Patient Identification) segments
-- Maps key patient demographics including:
-  - Patient ID
-  - Name (Family and Given names)
-  - Birth Date
-  - Gender
-  - Address (Street, City, State, Postal Code, Country)
+- Convert FHIR Patient JSON to HL7 v2.x ADT^A01 messages
+- Convert HL7 v2.x ADT^A01 messages to FHIR Patient JSON
 
-### Example
+### Configuration
+
+The processor requires one configuration parameter:
+
+- `inputType`: Specifies the input data type
+  - Values: "fhir" or "hl7"
+  - Default: "fhir"
+  - Required: true
+
+Example configuration:
+```json
+{
+    "inputType": "fhir"
+}
+```
+
+### Examples
+
+#### FHIR to HL7 (inputType: "fhir")
 
 Input FHIR JSON:
-
 ```json
 {
   "id": "123",
-  "name": ["Smith", "John"],
+  "name": [{"family": ["Smith"], "given": ["John"]}],
   "birthDate": "1990-01-01",
   "gender": "male",
   "address": [{"line": ["123 Main St"], "city": "Springfield", "state": "IL", "postalCode": "62701", "country": "USA"}]
 }
 ```
 
-Output HL7 message:
-
+Output:
+```json
+{
+  "hl7": "MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|20230815120000||ADT^A01|123|P|2.5|\nPID|1||123||Smith^John||1990-01-01|male|||123 Main St^Springfield^IL^62701^USA||||||123"
+}
 ```
-MSH|^~\&|HOSPITAL|ADT|HOSPITAL|HOSPITAL|19900101000000||ADT^A01^ADT_A01|123|P|2.3
-PID|1|123|Smith^John^|19900101|M||123 Main St^Springfield^IL^62701^USA
+
+#### HL7 to FHIR (inputType: "hl7")
+
+Input:
+```json
+{
+  "hl7": "MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|20230815120000||ADT^A01|123|P|2.5|\nPID|1||123||Smith^John||1990-01-01|male|||123 Main St^Springfield^IL^62701^USA||||||123"
+}
 ```
 
-
-### Processor Configuration
-
-This processor requires no configuration parameters.
+Output FHIR JSON:
+```json
+{
+  "id": "123",
+  "name": [{"family": ["Smith"], "given": ["John"]}],
+  "birthDate": "1990-01-01",
+  "gender": "male",
+  "address": [{"line": ["123 Main St"], "city": "Springfield", "state": "IL", "postalCode": "62701", "country": "USA"}]
+}
+```
 
 ## Known Issues & Limitations
 
