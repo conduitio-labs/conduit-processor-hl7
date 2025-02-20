@@ -196,7 +196,7 @@ func TestProcessor_Specification(t *testing.T) {
 	spec, err := p.Specification()
 	is.NoErr(err)
 	is.Equal(spec.Name, "conduit-processor-hl7")
-	is.Equal(spec.Version, "v0.1.0")
+	is.Equal(spec.Version, "v0.1.1")
 }
 
 // Helper function to split HL7 message into segments
