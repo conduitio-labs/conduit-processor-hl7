@@ -120,7 +120,7 @@ func (p *Processor) Specification() (sdk.Specification, error) {
 		Name:        "conduit-processor-hl7",
 		Summary:     "Converts FHIR Patient resources to HL7 messages",
 		Description: "This processor converts FHIR Patient resources into HL7 v2.x messages.",
-		Version:     "v0.1.0",
+		Version:     "v0.1.1",
 		Author:      "William Hill",
 		Parameters:  p.config.Parameters(),
 	}, nil
