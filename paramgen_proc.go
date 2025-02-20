@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	ProcessorConfigInputType = "inputType"
+	ProcessorConfigInputType  = "inputType"
+	ProcessorConfigOutputType = "outputType"
 )
 
 func (ProcessorConfig) Parameters() map[string]config.Parameter {
@@ -19,7 +20,16 @@ func (ProcessorConfig) Parameters() map[string]config.Parameter {
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-				config.ValidationInclusion{List: []string{"fhir", "hl7"}},
+				config.ValidationInclusion{List: []string{"fhir", "hl7", "hl7v3"}},
+			},
+		},
+		ProcessorConfigOutputType: {
+			Default:     "",
+			Description: "",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+				config.ValidationInclusion{List: []string{"fhir", "hl7", "hl7v3"}},
 			},
 		},
 	}
