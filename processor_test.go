@@ -17,19 +17,22 @@ func TestProcessor_Process(t *testing.T) {
 
 	// Configure processor with FHIR input type
 	err := p.Configure(context.Background(), map[string]string{
-		"inputType": "fhir",
+		"inputType":  "fhir",
+		"outputType": "hl7",
 	})
 	is.NoErr(err)
 
 	tests := []struct {
-		name      string
-		inputType string
-		input     string
-		wantErr   bool
+		name       string
+		inputType  string
+		outputType string
+		input      string
+		wantErr    bool
 	}{
 		{
-			name:      "valid FHIR patient",
-			inputType: "fhir",
+			name:       "valid FHIR patient",
+			inputType:  "fhir",
+			outputType: "hl7",
 			input: `{
 				"id": "123",
 				"name": [{
@@ -49,37 +52,68 @@ func TestProcessor_Process(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:      "valid raw HL7 message",
-			inputType: "hl7",
-			input:     "MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|20230815120000||ADT^A01|123|P|2.5|\nPID|1||123||Smith^John||1990-01-01|male|||123 Main St^Springfield^IL^62701^USA||||||123",
-			wantErr:   false,
+			name:       "valid raw HL7 message",
+			inputType:  "hl7",
+			outputType: "fhir",
+			input:      "MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|20230815120000||ADT^A01|123|P|2.5|\nPID|1||123||Smith^John||1990-01-01|male|||123 Main St^Springfield^IL^62701^USA||||||123",
+			wantErr:    false,
 		},
 		{
-			name:      "valid JSON-wrapped HL7 message",
-			inputType: "hl7",
+			name:       "valid JSON-wrapped HL7 message",
+			inputType:  "hl7",
+			outputType: "fhir",
 			input: `{
 				"hl7": "MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|20230815120000||ADT^A01|123|P|2.5|\nPID|1||123||Smith^John||1990-01-01|male|||123 Main St^Springfield^IL^62701^USA||||||123"
 			}`,
 			wantErr: false,
 		},
 		{
-			name:      "invalid JSON",
-			inputType: "fhir",
-			input:     `{"invalid": json}`,
-			wantErr:   true,
+			name:       "invalid JSON",
+			inputType:  "fhir",
+			outputType: "hl7",
+			input:      `{"invalid": json`, // Malformed JSON (missing closing brace)
+			wantErr:    true,
 		},
 		{
-			name:      "invalid HL7 message",
-			inputType: "hl7",
-			input:     `INVALID|HL7|MESSAGE`,
-			wantErr:   true,
+			name:       "invalid HL7 message",
+			inputType:  "hl7",
+			outputType: "fhir",
+			input:      `INVALID|HL7|MESSAGE`,
+			wantErr:    true,
 		},
 		{
-			name:      "minimal FHIR patient",
-			inputType: "fhir",
+			name:       "minimal FHIR patient",
+			inputType:  "fhir",
+			outputType: "hl7",
 			input: `{
 				"id": "456"
 			}`,
+			wantErr: false,
+		},
+		{
+			name:       "valid HL7v3 message",
+			inputType:  "hl7v3",
+			outputType: "fhir",
+			input: `<?xml version="1.0" encoding="UTF-8"?>
+			<Patient xmlns="urn:hl7-org:v3">
+				<id>pat-7335</id>
+				<name>
+					<given>Novella</given>
+					<family>Hoeger</family>
+				</name>
+				<administrativeGenderCode>
+					<code>M</code>
+				</administrativeGenderCode>
+				<birthTime>
+					<value>19760320000000</value>
+				</birthTime>
+				<addr>
+					<streetAddressLine>6847 Vistaside</streetAddressLine>
+					<city>Greensboro</city>
+					<state>Vermont</state>
+					<postalCode>89755</postalCode>
+				</addr>
+			</Patient>`,
 			wantErr: false,
 		},
 	}
@@ -88,7 +122,8 @@ func TestProcessor_Process(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Configure processor for this test
 			err := p.Configure(context.Background(), map[string]string{
-				"inputType": tt.inputType,
+				"inputType":  tt.inputType,
+				"outputType": tt.outputType,
 			})
 			is.NoErr(err)
 
@@ -137,8 +172,8 @@ func TestProcessor_Configure(t *testing.T) {
 
 	// Test valid configurations
 	validConfigs := []map[string]string{
-		{"inputType": "fhir"},
-		{"inputType": "hl7"},
+		{"inputType": "fhir", "outputType": "hl7"},
+		{"inputType": "hl7", "outputType": "fhir"},
 	}
 
 	for _, cfg := range validConfigs {
@@ -148,7 +183,8 @@ func TestProcessor_Configure(t *testing.T) {
 
 	// Test invalid configuration
 	err := p.Configure(context.Background(), map[string]string{
-		"inputType": "invalid",
+		"inputType":  "invalid",
+		"outputType": "hl7",
 	})
 	is.True(err != nil) // Configure should fail with invalid input type
 }
@@ -186,6 +222,7 @@ func splitHL7Message(msg string) []string {
 
 func TestConvertFHIRToHL7(t *testing.T) {
 	is := is.New(t)
+	p := NewProcessor().(*Processor)
 
 	patient := FHIRPatient{
 		ID: "123",
@@ -217,7 +254,8 @@ func TestConvertFHIRToHL7(t *testing.T) {
 		},
 	}
 
-	hl7Message := convertFHIRToHL7(patient)
+	hl7Message, err := p.convertFHIRToHL7(patient)
+	is.NoErr(err)
 	segments := splitHL7Message(hl7Message)
 
 	is.Equal(len(segments), 2) // should have MSH and PID segments
@@ -252,6 +290,7 @@ func splitHL7Field(segment string) []string {
 // Add test for HL7 to FHIR conversion
 func TestConvertHL7ToFHIR(t *testing.T) {
 	is := is.New(t)
+	p := NewProcessor().(*Processor)
 
 	hl7msg := HL7Message{}
 	hl7msg.PID.ID = "123"
@@ -265,7 +304,8 @@ func TestConvertHL7ToFHIR(t *testing.T) {
 	hl7msg.PID.Address.PostalCode = "62701"
 	hl7msg.PID.Address.Country = "USA"
 
-	patient := convertHL7ToFHIR(hl7msg)
+	patient, err := p.convertHL7ToFHIR(hl7msg)
+	is.NoErr(err)
 
 	// Verify conversion
 	is.Equal(patient.ID, "123")
@@ -305,4 +345,51 @@ func TestParseHL7Message(t *testing.T) {
 	is.Equal(msg.PID.Address.State, "IL")
 	is.Equal(msg.PID.Address.PostalCode, "62701")
 	is.Equal(msg.PID.Address.Country, "USA")
+}
+
+func TestConvertHL7V3ToFHIR(t *testing.T) {
+	is := is.New(t)
+	p := NewProcessor().(*Processor)
+
+	v3Patient := HL7V3Patient{
+		ID: "pat-7335",
+		Name: struct {
+			Given  string `xml:"given"`
+			Family string `xml:"family"`
+		}{
+			Given:  "Novella",
+			Family: "Hoeger",
+		},
+		Gender: struct {
+			Code string `xml:"code"`
+		}{Code: "M"},
+		BirthTime: struct {
+			Value string `xml:"value"`
+		}{Value: "19760320000000"},
+		Address: struct {
+			Street     string `xml:"streetAddressLine"`
+			City       string `xml:"city"`
+			State      string `xml:"state"`
+			PostalCode string `xml:"postalCode"`
+		}{
+			Street:     "6847 Vistaside",
+			City:       "Greensboro",
+			State:      "Vermont",
+			PostalCode: "89755",
+		},
+	}
+
+	patient, err := p.convertHL7V3ToFHIR(v3Patient)
+	is.NoErr(err)
+
+	// Verify conversion
+	is.Equal(patient.ID, "pat-7335")
+	is.Equal(patient.Name[0].Family[0], "Hoeger")
+	is.Equal(patient.Name[0].Given[0], "Novella")
+	is.Equal(patient.BirthDate, "1976-03-20")
+	is.Equal(patient.Gender, "male")
+	is.Equal(patient.Address[0].Line[0], "6847 Vistaside")
+	is.Equal(patient.Address[0].City, "Greensboro")
+	is.Equal(patient.Address[0].State, "Vermont")
+	is.Equal(patient.Address[0].PostalCode, "89755")
 }

@@ -3,6 +3,7 @@ package hl7
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"strings"
 	"time"
@@ -20,7 +21,8 @@ type Processor struct {
 
 // ProcessorConfig holds the configuration for the processor.
 type ProcessorConfig struct {
-	InputType string `json:"inputType" validate:"required,inclusion=fhir|hl7"`
+	InputType  string `json:"inputType" validate:"required,inclusion=fhir|hl7|hl7v3"`
+	OutputType string `json:"outputType" validate:"required,inclusion=fhir|hl7|hl7v3"`
 }
 
 // FHIRPatient represents a FHIR Patient resource structure.
@@ -66,6 +68,28 @@ type HL7Message struct {
 	}
 }
 
+// Add HL7v3 Patient structure
+type HL7V3Patient struct {
+	XMLName xml.Name `xml:"Patient"`
+	ID      string   `xml:"id"`
+	Name    struct {
+		Given  string `xml:"given"`
+		Family string `xml:"family"`
+	} `xml:"name"`
+	Gender struct {
+		Code string `xml:"code"`
+	} `xml:"administrativeGenderCode"`
+	BirthTime struct {
+		Value string `xml:"value"`
+	} `xml:"birthTime"`
+	Address struct {
+		Street     string `xml:"streetAddressLine"`
+		City       string `xml:"city"`
+		State      string `xml:"state"`
+		PostalCode string `xml:"postalCode"`
+	} `xml:"addr"`
+}
+
 // NewProcessor creates a new processor instance.
 func NewProcessor() sdk.Processor {
 	sdk.Logger(context.Background()).Info().Msg("Creating new HL7 processor instance")
@@ -104,20 +128,16 @@ func (p *Processor) Specification() (sdk.Specification, error) {
 
 // Add function to parse HL7 message
 func parseHL7Message(message string) (HL7Message, error) {
+	// Validate minimum HL7 structure
+	if !strings.HasPrefix(message, "MSH|") {
+		return HL7Message{}, fmt.Errorf("invalid HL7 message - missing MSH segment")
+	}
+
 	var msg HL7Message
 	segments := strings.Split(message, "\n")
 
-	sdk.Logger(context.Background()).Debug().
-		Str("message", message).
-		Int("segment_count", len(segments)).
-		Msg("Parsing HL7 message")
-
 	for _, segment := range segments {
 		fields := strings.Split(segment, "|")
-		sdk.Logger(context.Background()).Debug().
-			Str("segment", segment).
-			Int("field_count", len(fields)).
-			Msg("Parsing segment")
 
 		switch fields[0] {
 		case "MSH":
@@ -127,6 +147,10 @@ func parseHL7Message(message string) (HL7Message, error) {
 			msg.MSH.MessageType = fields[8]
 			msg.MSH.ControlID = fields[9]
 		case "PID":
+			// Validate required PID fields
+			if len(fields) < 4 || fields[3] == "" {
+				return HL7Message{}, fmt.Errorf("missing patient ID in PID segment")
+			}
 			msg.PID.ID = fields[3]
 
 			// Parse name (format: LastName^FirstName)
@@ -165,24 +189,39 @@ func parseHL7Message(message string) (HL7Message, error) {
 		}
 	}
 
+	// Post-validation
+	if msg.PID.ID == "" {
+		return HL7Message{}, fmt.Errorf("missing PID segment")
+	}
+
 	return msg, nil
 }
 
 // Add function to convert HL7 to FHIR
-func convertHL7ToFHIR(hl7msg HL7Message) FHIRPatient {
+func (p *Processor) convertHL7ToFHIR(msg HL7Message) (FHIRPatient, error) {
+	if msg.PID.ID == "" {
+		return FHIRPatient{}, fmt.Errorf("missing patient ID")
+	}
+	if msg.PID.LastName == "" {
+		return FHIRPatient{}, fmt.Errorf("missing patient last name")
+	}
+	if msg.PID.BirthDate == "" {
+		return FHIRPatient{}, fmt.Errorf("missing birth date")
+	}
+
 	patient := FHIRPatient{
-		ID: hl7msg.PID.ID,
+		ID: msg.PID.ID,
 		Name: []struct {
 			Family []string `json:"family"`
 			Given  []string `json:"given"`
 		}{
 			{
-				Family: []string{hl7msg.PID.LastName},
-				Given:  []string{hl7msg.PID.FirstName},
+				Family: []string{msg.PID.LastName},
+				Given:  []string{msg.PID.FirstName},
 			},
 		},
-		BirthDate: hl7msg.PID.BirthDate,
-		Gender:    strings.ToLower(hl7msg.PID.Gender),
+		BirthDate: msg.PID.BirthDate,
+		Gender:    strings.ToLower(msg.PID.Gender),
 		Address: []struct {
 			Line       []string `json:"line"`
 			City       string   `json:"city"`
@@ -191,15 +230,65 @@ func convertHL7ToFHIR(hl7msg HL7Message) FHIRPatient {
 			Country    string   `json:"country"`
 		}{
 			{
-				Line:       []string{hl7msg.PID.Address.Street},
-				City:       hl7msg.PID.Address.City,
-				State:      hl7msg.PID.Address.State,
-				PostalCode: hl7msg.PID.Address.PostalCode,
-				Country:    hl7msg.PID.Address.Country,
+				Line:       []string{msg.PID.Address.Street},
+				City:       msg.PID.Address.City,
+				State:      msg.PID.Address.State,
+				PostalCode: msg.PID.Address.PostalCode,
+				Country:    msg.PID.Address.Country,
 			},
 		},
 	}
-	return patient
+	return patient, nil
+}
+
+// Add HL7v3 to FHIR conversion
+func (p *Processor) convertHL7V3ToFHIR(v3Patient HL7V3Patient) (FHIRPatient, error) {
+	// Convert HL7v3 date format (YYYYMMDDHHMMSS) to FHIR date (YYYY-MM-DD)
+	birthDate := ""
+	if len(v3Patient.BirthTime.Value) >= 8 {
+		birthDate = fmt.Sprintf("%s-%s-%s",
+			v3Patient.BirthTime.Value[0:4],
+			v3Patient.BirthTime.Value[4:6],
+			v3Patient.BirthTime.Value[6:8],
+		)
+	}
+
+	// Map gender codes
+	genderMap := map[string]string{
+		"M": "male",
+		"F": "female",
+		"U": "unknown",
+	}
+
+	patient := FHIRPatient{
+		ID: v3Patient.ID,
+		Name: []struct {
+			Family []string `json:"family"`
+			Given  []string `json:"given"`
+		}{
+			{
+				Family: []string{v3Patient.Name.Family},
+				Given:  []string{v3Patient.Name.Given},
+			},
+		},
+		BirthDate: birthDate,
+		Gender:    genderMap[v3Patient.Gender.Code],
+		Address: []struct {
+			Line       []string `json:"line"`
+			City       string   `json:"city"`
+			State      string   `json:"state"`
+			PostalCode string   `json:"postalCode"`
+			Country    string   `json:"country"`
+		}{
+			{
+				Line:       []string{v3Patient.Address.Street},
+				City:       v3Patient.Address.City,
+				State:      v3Patient.Address.State,
+				PostalCode: v3Patient.Address.PostalCode,
+			},
+		},
+	}
+	return patient, nil
 }
 
 // Update Process method to handle raw HL7 input
@@ -211,95 +300,104 @@ func (p *Processor) Process(ctx context.Context, records []opencdc.Record) []sdk
 	for i, record := range records {
 		logger.Info().Int("index", i).Msg("Processing record")
 
-		rawBytes := record.Payload.After.Bytes()
+		var resultData interface{}
+		var conversionErr error
 
-		switch p.config.InputType {
-		case "fhir":
-			// FHIR to HL7 conversion logic
+		switch p.config.InputType + "->" + p.config.OutputType {
+		case "fhir->hl7":
+			rawBytes := record.Payload.After.Bytes()
 			var patient FHIRPatient
-			err := json.Unmarshal(rawBytes, &patient)
-			if err != nil {
-				// Try test case structure
-				var testCase struct {
-					Name    string      `json:"name"`
-					Input   FHIRPatient `json:"input"`
-					WantErr bool        `json:"wantErr"`
-				}
-
-				err2 := json.Unmarshal(rawBytes, &testCase)
-				if err2 != nil {
-					logger.Error().Err(err).Err(err2).Msg("Failed to unmarshal both as patient and test case")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse FHIR JSON: %w", err)}
-					continue
-				}
-				patient = testCase.Input
+			if err := json.Unmarshal(rawBytes, &patient); err != nil {
+				logger.Error().Err(err).Msg("Failed to parse FHIR patient")
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse FHIR JSON: %w", err)}
+				continue
 			}
-
-			hl7Message := convertFHIRToHL7(patient)
-			record.Payload.After = opencdc.StructuredData{
-				"hl7": hl7Message,
+			resultData, conversionErr = p.convertFHIRToHL7(patient)
+		case "fhir->hl7v3":
+			rawBytes := record.Payload.After.Bytes()
+			var patient FHIRPatient
+			if err := json.Unmarshal(rawBytes, &patient); err != nil {
+				logger.Error().Err(err).Msg("Failed to parse FHIR patient")
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse FHIR JSON: %w", err)}
+				continue
 			}
+			resultData, conversionErr = p.convertFHIRToHL7V3(patient)
+		case "hl7->fhir":
+			rawBytes := record.Payload.After.Bytes()
+			logger.Debug().Str("input", string(rawBytes)).Msg("Raw input for HL7 parsing")
+			var hl7msg HL7Message
+			var err error
 
-		case "hl7":
-			// HL7 to FHIR conversion logic
-			hl7String := string(rawBytes)
-
-			logger.Info().Str("hl7String", hl7String).Msg("HL7 string")
-
-			// Check if the input is raw HL7 (starts with MSH) or JSON-wrapped
-			if strings.HasPrefix(hl7String, "MSH|") {
-				// Process raw HL7
-				hl7msg, err := parseHL7Message(hl7String)
-				if err != nil {
-					logger.Error().Err(err).Msg("Failed to parse HL7 message")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7 message: %w", err)}
-					continue
-				}
-
-				fhirPatient := convertHL7ToFHIR(hl7msg)
-				fhirJSON, err := json.Marshal(fhirPatient)
-				if err != nil {
-					logger.Error().Err(err).Msg("Failed to marshal FHIR patient")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to marshal FHIR patient: %w", err)}
-					continue
-				}
-
-				record.Payload.After = opencdc.RawData(fhirJSON)
-			} else {
-				// Try JSON-wrapped HL7
-				var hl7Data struct {
+			if strings.HasPrefix(string(rawBytes), "{") {
+				var wrapper struct {
 					HL7 string `json:"hl7"`
 				}
-
-				err := json.Unmarshal(rawBytes, &hl7Data)
-				if err != nil {
-					logger.Error().Err(err).Msg("Failed to unmarshal HL7 JSON")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7 input: %w", err)}
+				if err := json.Unmarshal(rawBytes, &wrapper); err != nil {
+					logger.Error().Err(err).Msg("Failed to parse HL7 wrapper")
+					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7 JSON: %w", err)}
 					continue
 				}
-
-				hl7msg, err := parseHL7Message(hl7Data.HL7)
-				if err != nil {
-					logger.Error().Err(err).Msg("Failed to parse HL7 message")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7 message: %w", err)}
-					continue
-				}
-
-				fhirPatient := convertHL7ToFHIR(hl7msg)
-				fhirJSON, err := json.Marshal(fhirPatient)
-				if err != nil {
-					logger.Error().Err(err).Msg("Failed to marshal FHIR patient")
-					result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to marshal FHIR patient: %w", err)}
-					continue
-				}
-
-				record.Payload.After = opencdc.RawData(fhirJSON)
+				hl7msg, err = parseHL7Message(wrapper.HL7)
+			} else {
+				hl7msg, err = parseHL7Message(string(rawBytes))
 			}
 
+			if err != nil {
+				logger.Error().Err(err).Msg("Failed to parse HL7 message")
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7: %w", err)}
+				continue
+			}
+			logger.Debug().Interface("parsed_hl7", hl7msg).Msg("Parsed HL7 message")
+			resultData, conversionErr = p.convertHL7ToFHIR(hl7msg)
+			logger.Debug().Interface("fhir_patient", resultData).Msg("Converted FHIR patient")
+		case "hl7v3->fhir":
+			rawBytes := record.Payload.After.Bytes()
+			var v3Patient HL7V3Patient
+			if err := xml.Unmarshal(rawBytes, &v3Patient); err != nil {
+				logger.Error().Err(err).Msg("Failed to parse HL7v3 patient")
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to parse HL7v3 XML: %w", err)}
+				continue
+			}
+			resultData, conversionErr = p.convertHL7V3ToFHIR(v3Patient)
 		default:
-			logger.Error().Str("type", p.config.InputType).Msg("Invalid input type")
-			result[i] = sdk.ErrorRecord{Error: fmt.Errorf("invalid input type: %s", p.config.InputType)}
+			conversionErr = fmt.Errorf("unsupported conversion: %s->%s",
+				p.config.InputType, p.config.OutputType)
+		}
+
+		if conversionErr != nil {
+			logger.Error().Err(conversionErr).Msg("Conversion error")
+			result[i] = sdk.ErrorRecord{Error: conversionErr}
 			continue
+		}
+
+		// Marshal resultData based on output type
+		switch p.config.OutputType {
+		case "fhir":
+			fhirPatient, ok := resultData.(FHIRPatient)
+			if !ok {
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("invalid FHIR output type")}
+				continue
+			}
+			fhirJSON, err := json.Marshal(fhirPatient)
+			if err != nil {
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("failed to marshal FHIR patient: %w", err)}
+				continue
+			}
+			record.Payload.After = opencdc.RawData(fhirJSON)
+		case "hl7":
+			hl7Message, ok := resultData.(string)
+			if !ok {
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("invalid HL7 output type")}
+				continue
+			}
+			record.Payload.After = opencdc.StructuredData{"hl7": hl7Message}
+		case "hl7v3":
+			xmlData, ok := resultData.([]byte)
+			if !ok {
+				result[i] = sdk.ErrorRecord{Error: fmt.Errorf("invalid HL7v3 output type")}
+				continue
+			}
+			record.Payload.After = opencdc.RawData(xmlData)
 		}
 
 		result[i] = sdk.SingleRecord(record)
@@ -308,7 +406,7 @@ func (p *Processor) Process(ctx context.Context, records []opencdc.Record) []sdk
 	return result
 }
 
-func convertFHIRToHL7(patient FHIRPatient) string {
+func (p *Processor) convertFHIRToHL7(patient FHIRPatient) (string, error) {
 	currentTime := time.Now().Format("20060102150405")
 	msh := fmt.Sprintf("MSH|^~\\&|FHIR_CONVERTER|FACILITY|HL7_PARSER|FACILITY|%s||ADT^A01|%s|P|2.5|",
 		currentTime, currentTime)
@@ -350,5 +448,100 @@ func convertFHIRToHL7(patient FHIRPatient) string {
 		patient.ID,
 	)
 
-	return msh + "\n" + pid
+	return msh + "\n" + pid, nil
+}
+
+// Add validation for compatible types
+func (p *Processor) Validate(ctx context.Context, cfg config.Config) error {
+	var config struct {
+		InputType  string
+		OutputType string
+	}
+	err := sdk.ParseConfig(ctx, cfg, &config, nil)
+	if err != nil {
+		return err
+	}
+
+	// Define valid conversion paths
+	validConversions := map[string][]string{
+		"fhir":  {"hl7", "hl7v3"},
+		"hl7":   {"fhir"},
+		"hl7v3": {"fhir"},
+	}
+
+	if allowed, exists := validConversions[config.InputType]; exists {
+		for _, a := range allowed {
+			if a == config.OutputType {
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("invalid conversion from %s to %s", config.InputType, config.OutputType)
+}
+
+func (p *Processor) convertFHIRToHL7V3(patient FHIRPatient) ([]byte, error) {
+	// Convert FHIR date to HL7v3 format
+	birthTime := ""
+	if patient.BirthDate != "" {
+		birthTime = strings.ReplaceAll(patient.BirthDate, "-", "") + "000000"
+	}
+
+	v3Patient := HL7V3Patient{
+		XMLName: xml.Name{Local: "Patient", Space: "urn:hl7-org:v3"},
+		ID:      patient.ID,
+		Name: struct {
+			Given  string `xml:"given"`
+			Family string `xml:"family"`
+		}{
+			Given:  patient.Name[0].Given[0],
+			Family: patient.Name[0].Family[0],
+		},
+		Gender: struct {
+			Code string `xml:"code"`
+		}{
+			Code: strings.ToUpper(patient.Gender[:1]),
+		},
+		BirthTime: struct {
+			Value string `xml:"value"`
+		}{
+			Value: birthTime,
+		},
+		Address: struct {
+			Street     string `xml:"streetAddressLine"`
+			City       string `xml:"city"`
+			State      string `xml:"state"`
+			PostalCode string `xml:"postalCode"`
+		}{
+			Street:     patient.Address[0].Line[0],
+			City:       patient.Address[0].City,
+			State:      patient.Address[0].State,
+			PostalCode: patient.Address[0].PostalCode,
+		},
+	}
+
+	return xml.MarshalIndent(v3Patient, "", "  ")
+}
+
+func (p *Processor) Parameters() map[string]config.Parameter {
+	return map[string]config.Parameter{
+		"inputType": {
+			Default:     "fhir",
+			Description: "Input data type: 'fhir', 'hl7' (v2), or 'hl7v3'",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+				config.ValidationInclusion{List: []string{"fhir", "hl7", "hl7v3"}},
+			},
+		},
+		"outputType": {
+			Default:     "hl7",
+			Description: "Output data type: 'fhir', 'hl7' (v2), or 'hl7v3'",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+				config.ValidationInclusion{List: []string{"fhir", "hl7", "hl7v3"}},
+			},
+		},
+	}
 }
