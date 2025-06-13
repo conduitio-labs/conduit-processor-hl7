@@ -70,8 +70,8 @@ github.com/chavacava/garif v0.1.0 h1:2JHa3hbYf5D9dsgseMKAmc/MZ109otzgNFk5s87H9Pc
 github.com/chavacava/garif v0.1.0/go.mod h1:XMyYCkEL58DF0oyW4qDjjnPWONs2HBqYKI+UIPD+Gww=
 github.com/ckaznocha/intrange v0.3.0 h1:VqnxtK32pxgkhJgYQEeOArVidIPg+ahLP7WBOXZd5ZY=
 github.com/ckaznocha/intrange v0.3.0/go.mod h1:+I/o2d2A1FBHgGELbGxzIcyd3/9l9DuwjM8FsbSS3Lo=
-github.com/conduitio/conduit-commons v0.5.4 h1:O1j08gsC7Bf3Y0CbfIcpWz0719Ehx3GoHqVLItsOQbU=
-github.com/conduitio/conduit-commons v0.5.4/go.mod h1:GtxenYQA3eWPeH+rCdycHVO/zE9rngAmwRAlqvshL+8=
+github.com/conduitio/conduit-commons v0.6.0 h1:UgKXYAMEO3w759R5EmAP0Ax5yFWPGqvPMr/neltfsAI=
+github.com/conduitio/conduit-commons v0.6.0/go.mod h1:n+zdde8QZ+gX4m4tjv7qT1xomZSGZg/dpoTx/JR/fh4=
 github.com/conduitio/conduit-processor-sdk v0.4.3 h1:ig1GF5SRwSZb4ej9E3ZcvbLh3rDTgomptqRvjI4ry8k=
 github.com/conduitio/conduit-processor-sdk v0.4.3/go.mod h1:2EkF3uF30ChbDqiWlEWFYHJ7cq0qsA+nWScVE0vfwKg=
 github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSVTIJ3seZv2GcEnc=
